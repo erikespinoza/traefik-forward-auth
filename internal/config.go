@@ -32,6 +32,7 @@ type Config struct {
 	CSRFCookieName         string               `long:"csrf-cookie-name" env:"CSRF_COOKIE_NAME" default:"_forward_auth_csrf" description:"CSRF Cookie Name"`
 	DefaultAction          string               `long:"default-action" env:"DEFAULT_ACTION" default:"auth" choice:"auth" choice:"allow" description:"Default action"`
 	DefaultProvider        string               `long:"default-provider" env:"DEFAULT_PROVIDER" default:"google" choice:"google" choice:"oidc" choice:"generic-oauth" description:"Default provider"`
+	DefaultRuleSyntax      string               `long:"default-rule-syntax" env:"DEFAULT_RULE_SYNTAX" default:"v2" choice:"v2" choice:"v3" description:"Default rule syntax"`
 	Domains                CommaSeparatedList   `long:"domain" env:"DOMAIN" env-delim:"," description:"Only allow given email domains, can be set multiple times"`
 	LifetimeString         int                  `long:"lifetime" env:"LIFETIME" default:"43200" description:"Lifetime in seconds"`
 	LogoutRedirect         string               `long:"logout-redirect" env:"LOGOUT_REDIRECT" description:"URL to redirect to following logout"`
@@ -88,10 +89,13 @@ func NewConfig(args []string) (*Config, error) {
 	// TODO: Rename "Validate" method to "Setup" and move all below logic
 
 	// Setup
-	// Set default provider on any rules where it's not specified
+	// Set default provider and syntax on any rules where it's not specified
 	for _, rule := range c.Rules {
 		if rule.Provider == "" {
 			rule.Provider = c.DefaultProvider
+		}
+		if rule.Syntax == "" {
+			rule.Syntax = c.DefaultRuleSyntax
 		}
 	}
 
@@ -211,6 +215,8 @@ func (c *Config) parseUnknownFlag(option string, arg flags.SplitArgument, args [
 			rule.Rule = val
 		case "provider":
 			rule.Provider = val
+		case "syntax":
+			rule.Syntax = val
 		case "whitelist":
 			list := CommaSeparatedList{}
 			list.UnmarshalFlag(val)
@@ -341,6 +347,7 @@ type Rule struct {
 	Provider  string
 	Whitelist CommaSeparatedList
 	Domains   CommaSeparatedList
+	Syntax    string
 }
 
 // NewRule creates a new rule object
@@ -360,6 +367,14 @@ func (r *Rule) formattedRule() string {
 func (r *Rule) Validate(c *Config) error {
 	if r.Action != "auth" && r.Action != "allow" {
 		return errors.New("invalid rule action, must be \"auth\" or \"allow\"")
+	}
+
+	if r.Syntax == "" {
+		r.Syntax = c.DefaultRuleSyntax
+	}
+
+	if r.Syntax != "v2" && r.Syntax != "v3" {
+		return fmt.Errorf("invalid rule syntax %q, must be \"v2\" or \"v3\"", r.Syntax)
 	}
 
 	return c.setupProvider(r.Provider)

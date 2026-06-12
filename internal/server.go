@@ -6,7 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/thomseddon/traefik-forward-auth/internal/provider"
-	muxhttp "github.com/traefik/traefik/v2/pkg/muxer/http"
+	muxhttp "github.com/traefik/traefik/v3/pkg/muxer/http"
 )
 
 // Server contains muxer and handler methods
@@ -22,33 +22,40 @@ func NewServer() *Server {
 }
 
 func (s *Server) buildRoutes() {
-	var err error
-	s.muxer, err = muxhttp.NewMuxer()
+	parser, err := muxhttp.NewSyntaxParser()
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// We pass nil for providersPrecedence as we do not prioritize between different providers
+	s.muxer = muxhttp.NewMuxer(parser, nil)
+
 	// Let's build a muxer
 	for name, rule := range config.Rules {
 		matchRule := rule.formattedRule()
+		var err error
+		syntax := rule.Syntax
+		if syntax == "" {
+			syntax = config.DefaultRuleSyntax
+		}
+		if syntax == "" {
+			syntax = "v2"
+		}
 		if rule.Action == "allow" {
-			_ = s.muxer.AddRoute(matchRule, 1, s.AllowHandler(name))
+			err = s.muxer.AddRoute(matchRule, syntax, 1, rule.Provider, s.AllowHandler(name))
 		} else {
-			_ = s.muxer.AddRoute(matchRule, 1, s.AuthHandler(rule.Provider, name))
+			err = s.muxer.AddRoute(matchRule, syntax, 1, rule.Provider, s.AuthHandler(rule.Provider, name))
+		}
+		if err != nil {
+			log.Fatalf("error adding rule %s: %v", name, err)
 		}
 	}
 
-	// Add callback handler
-	s.muxer.Handle(config.Path, s.AuthCallbackHandler())
-
-	// Add logout handler
-	s.muxer.Handle(config.Path+"/logout", s.LogoutHandler())
-
 	// Add a default handler
 	if config.DefaultAction == "allow" {
-		s.muxer.NewRoute().Handler(s.AllowHandler("default"))
+		s.muxer.SetDefaultHandler(s.AllowHandler("default"))
 	} else {
-		s.muxer.NewRoute().Handler(s.AuthHandler(config.DefaultProvider, "default"))
+		s.muxer.SetDefaultHandler(s.AuthHandler(config.DefaultProvider, "default"))
 	}
 }
 
@@ -62,6 +69,16 @@ func (s *Server) RootHandler(w http.ResponseWriter, r *http.Request) {
 	// Read URI from header if we're acting as forward auth middleware
 	if _, ok := r.Header["X-Forwarded-Uri"]; ok {
 		r.URL, _ = url.Parse(r.Header.Get("X-Forwarded-Uri"))
+	}
+
+	// Intercept callback and logout paths
+	if r.URL.Path == config.Path {
+		s.AuthCallbackHandler().ServeHTTP(w, r)
+		return
+	}
+	if r.URL.Path == config.Path+"/logout" {
+		s.LogoutHandler().ServeHTTP(w, r)
+		return
 	}
 
 	// Pass to mux

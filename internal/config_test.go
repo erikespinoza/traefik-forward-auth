@@ -31,6 +31,7 @@ func TestConfigDefaults(t *testing.T) {
 	assert.Equal("_forward_auth_csrf", c.CSRFCookieName)
 	assert.Equal("auth", c.DefaultAction)
 	assert.Equal("google", c.DefaultProvider)
+	assert.Equal("v2", c.DefaultRuleSyntax)
 	assert.Len(c.Domains, 0)
 	assert.Equal(time.Second*time.Duration(43200), c.Lifetime)
 	assert.Equal("", c.LogoutRedirect)
@@ -68,11 +69,13 @@ func TestConfigParseArgs(t *testing.T) {
 			Action:   "allow",
 			Rule:     "PathPrefix(`/one`)",
 			Provider: "oidc",
+			Syntax:   "v2",
 		},
 		"two": {
 			Action:   "auth",
 			Rule:     "Host(`two.com`) && Path(`/two`)",
 			Provider: "oidc",
+			Syntax:   "v2",
 		},
 	}, c.Rules)
 }
@@ -180,11 +183,13 @@ func TestConfigParseIni(t *testing.T) {
 			Action:   "allow",
 			Rule:     "PathPrefix(`/one`)",
 			Provider: "google",
+			Syntax:   "v2",
 		},
 		"two": {
 			Action:   "auth",
 			Rule:     "Host(`two.com`) && Path(`/two`)",
 			Provider: "google",
+			Syntax:   "v2",
 		},
 	}, c.Rules)
 }
