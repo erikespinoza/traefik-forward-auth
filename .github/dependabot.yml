@@ -1,0 +1,7 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod" # Specifies the Go modules manager
+    directory: "/"             # Location of your go.mod file (root)
+    schedule:
+      interval: "weekly"       # Options: "daily", "weekly", "monthly"
+    open-pull-requests-limit: 5 # Limits the number of open PRs to prevent noise
